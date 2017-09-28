@@ -300,12 +300,11 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
         
         UIVisualEffectView *container = [[UIVisualEffectView alloc] initWithEffect:blur];
         [container.contentView addSubview:vibrancyView];
-        
-        self.topContainer = container;
-        
+                
         if(self.disableBlurEffectsForContentView) {
-            [self.topContainer addSubview:self.contentView];
+            [container.contentView addSubview:self.contentView];
         }
+        self.topContainer = container;        
     }
     
     //Botoom container
@@ -853,7 +852,7 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
             }
             
             [UIView animateWithDuration:duration delay:0 usingSpringWithDamping:damping initialSpringVelocity:1 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:^{
-                actionController.backgroundView.alpha = 0.8;
+                actionController.backgroundView.alpha = 1.0;
                 
                 [containerView layoutIfNeeded];
             } completion:^(BOOL finished) {
