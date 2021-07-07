@@ -301,3 +301,4 @@ typedef NS_ENUM(NSInteger, RMActionStyle) {
 @property (nonnull, nonatomic, strong, readonly) NSArray<RMAction<T> *> *actions;
 
 @end
+

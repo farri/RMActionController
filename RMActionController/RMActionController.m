@@ -206,6 +206,7 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
     
     [self setupUIElements];
 }
+
 -(void)keyboardWillShow:(NSNotification *)notification {
    
     NSDictionary *info  = notification.userInfo;
@@ -213,10 +214,17 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
     
     CGRect rawFrame      = [value CGRectValue];
     CGRect keyboardFrame = [self.view convertRect:rawFrame fromView:nil];
-
+    
+    // added
+    CGFloat safeAreaBottomMargin = 0.0;
+    if (@available(iOS 11, *)) {
+        safeAreaBottomMargin = self.view.safeAreaInsets.bottom;
+    }
+    //* added
+    
     // Animate the current view out of the way
     [UIView animateWithDuration:0.3f animations:^ {
-        self.view.frame = CGRectMake(0, [[UIScreen mainScreen] bounds].size.height - keyboardFrame.size.height - self.view.frame.size.height, self.view.frame.size.width, self.view.frame.size.height);
+        self.view.frame = CGRectMake(0, ([[UIScreen mainScreen] bounds].size.height - keyboardFrame.size.height - self.view.frame.size.height) + safeAreaBottomMargin, self.view.frame.size.width, self.view.frame.size.height);   // changed
     }];
 }
 
@@ -301,11 +309,11 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
         UIVisualEffectView *container = [[UIVisualEffectView alloc] initWithEffect:blur];
         [container.contentView addSubview:vibrancyView];
         
-        self.topContainer = container;
         
         if(self.disableBlurEffectsForContentView) {
-            [self.topContainer addSubview:self.contentView];
+            [container.contentView addSubview:self.contentView];
         }
+        self.topContainer = container;
     }
     
     //Botoom container
@@ -372,161 +380,361 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
 
 - (void)setupConstraints {
     NSDictionary *metrics = @{@"seperatorHeight": @(1.f / [[UIScreen mainScreen] scale])};
-    
+
     UIView *topContainer = self.topContainer;
     UIView *bottomContainer = self.bottomContainer;
-    
+
     UILabel *headerTitleLabel = self.headerTitleLabel;
     UILabel *headerMessageLabel = self.headerMessageLabel;
-    
+
     NSDictionary *bindingsDict = NSDictionaryOfVariableBindings(topContainer, bottomContainer, headerTitleLabel, headerMessageLabel);
-    
+
+    id item; // added
     if (self.removeBorderSpace) {
         //Container constraints
         [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|[topContainer]|" options:0 metrics:nil views:bindingsDict]];
-        
+
         if([self.cancelActions count] <= 0) {
-            [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]|" options:0 metrics:nil views:bindingsDict]];
+//            [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]|" options:0 metrics:nil views:bindingsDict]];
+            item = self.topContainer;   // added
         } else {
             [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|[bottomContainer]|" options:0 metrics:nil views:bindingsDict]];
             [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]-(10)-[bottomContainer]|" options:0 metrics:nil views:bindingsDict]];
+            item = self.bottomContainer;  // added
         }
     } else {
         //Container constraints
         [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(10)-[topContainer]-(10)-|" options:0 metrics:nil views:bindingsDict]];
-        
+
         if([self.cancelActions count] <= 0) {
-            [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]-(10)-|" options:0 metrics:nil views:bindingsDict]];
+//            [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]-(10)-|" options:0 metrics:nil views:bindingsDict]];
+            item = self.topContainer;   // added
         } else {
             [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(10)-[bottomContainer]-(10)-|" options:0 metrics:nil views:bindingsDict]];
             [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]-(10)-[bottomContainer]-(10)-|" options:0 metrics:nil views:bindingsDict]];
+            item = self.bottomContainer;  // added
         }
     }
     
+    // added
+    NSInteger bottomMargin = 0;
+    id bottomItem;
+    if (@available(iOS 11, *)) {
+        bottomItem = self.view.safeAreaLayoutGuide;
+    } else {
+        bottomItem = self.view;
+    }
+    
+    [self.view addConstraint:[NSLayoutConstraint constraintWithItem:item attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:bottomItem attribute:NSLayoutAttributeBottom multiplier:1 constant:-bottomMargin]];
+
     //Top container content constraints
     __block UIView *currentTopView = nil;
     __weak RMActionController *blockself = self;
     [self.doneActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
         UIView *seperator = [UIView seperatorView];
         [self addSubview:seperator toContainer:self.topContainer];
-        
+
         if(!currentTopView) {
             NSDictionary *bindings = @{@"actionView": action.view, @"seperator": seperator};
-            
+
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperator(seperatorHeight)]-(0)-[actionView]-(0)-|" options:0 metrics:metrics views:bindings]];
+            // added
+            id bottomItem;
+            if (@available(iOS 11, *)) {
+                bottomItem = self.topContainer.safeAreaLayoutGuide;
+            } else {
+                bottomItem = self.topContainer;
+            }
+            [blockself.topContainer addConstraint:[NSLayoutConstraint constraintWithItem:action.view attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:bottomItem attribute:NSLayoutAttributeBottom multiplier:1 constant:0]];
+            //* added
         } else {
             NSDictionary *bindings = @{@"actionView": action.view, @"seperator": seperator, @"currentTopView": currentTopView};
-            
+
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperator(seperatorHeight)]-(0)-[actionView]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
         }
-        
+
         currentTopView = seperator;
     }];
-    
+
     [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[contentView]-(0)-|" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
-    
+
     if(currentTopView) {
         [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[contentView]-(0)-[currentTopView]" options:0 metrics:nil views:@{@"contentView": self.contentView, @"currentTopView": currentTopView}]];
     } else {
         [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[contentView]-(0)-|" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
     }
-    
+
     if([self.additionalActions count] > 0 || [self.headerMessageLabel.text length] > 0 || [self.headerTitleLabel.text length] > 0) {
         __weak RMActionController *blockself = self;
         __block UIView *currentTopView = self.contentView;
-        
+
         [self.additionalActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
             UIView *actionView = action.view;
-            
+
             UIView *seperatorView = [UIView seperatorView];
             [self addSubview:seperatorView toContainer:blockself.topContainer];
-            
+
             NSDictionary *actionBindingsDict = NSDictionaryOfVariableBindings(currentTopView, seperatorView, actionView);
-            
+
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperatorView]-(0)-|" options:0 metrics:nil views:actionBindingsDict]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:actionBindingsDict]];
             [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-[seperatorView(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:actionBindingsDict]];
-            
+
             currentTopView = actionView;
         }];
-        
+
         if([self.headerMessageLabel.text length] > 0 || [self.headerTitleLabel.text length] > 0) {
             UIView *seperatorView = [UIView seperatorView];
             [self addSubview:seperatorView toContainer:self.topContainer];
-            
+
             NSDictionary *bindings = NSDictionaryOfVariableBindings(seperatorView, currentTopView);
-            
+
             [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperatorView]-(0)-|" options:0 metrics:nil views:bindings]];
             [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperatorView(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
-            
+
             currentTopView = seperatorView;
-            
+
             if([self.headerMessageLabel.text length] > 0) {
                 bindings = @{@"messageLabel": self.headerMessageLabel, @"currentTopView": currentTopView};
-                
+
                 [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(5)-[messageLabel]-(5)-|" options:0 metrics:nil views:bindings]];
                 [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[messageLabel]-(10)-[currentTopView]" options:0 metrics:nil views:bindings]];
-                
+
                 currentTopView = self.headerMessageLabel;
             }
-            
+
             if([self.headerTitleLabel.text length] > 0) {
                 bindings = @{@"titleLabel": self.headerTitleLabel, @"currentTopView": currentTopView};
                 NSDictionary *metrics = @{@"Margin": [currentTopView isKindOfClass:[UILabel class]] ? @(2) : @(10)};
-                
+
                 [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(5)-[titleLabel]-(5)-|" options:0 metrics:nil views:bindings]];
                 [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[titleLabel]-(Margin)-[currentTopView]" options:0 metrics:metrics views:bindings]];
-                
+
                 currentTopView = self.headerTitleLabel;
             }
         }
-        
+
         NSDictionary *metrics = @{@"Margin": (currentTopView == self.headerMessageLabel || currentTopView == self.headerTitleLabel) ? @(10) : @(0)};
         NSDictionary *bindings = NSDictionaryOfVariableBindings(currentTopView);
-        
+
         [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(Margin)-[currentTopView]" options:0 metrics:metrics views:bindings]];
     } else  {
         [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[contentView]" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
     }
-    
+
     //Bottom container content constraints
     if([self.cancelActions count] == 1) {
         RMAction *action = [self.cancelActions lastObject];
         NSDictionary *bindings = @{@"actionView": action.view};
-        
+
         [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
         [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
     } else if([self.cancelActions count] > 1) {
         __weak RMActionController *blockself = self;
         __block UIView *currentTopView = nil;
-        
+
         [self.cancelActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
             if(!currentTopView) {
                 NSDictionary *bindings = @{@"actionView": action.view};
-                
+
                 [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
                 [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
             } else {
                 UIView *seperatorView = [UIView seperatorView];
                 [self addSubview:seperatorView toContainer:self.bottomContainer];
-                
+
                 NSDictionary *bindings = @{@"actionView": action.view, @"currentTopView": currentTopView, @"seperator": seperatorView};
-                
+
                 [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
                 [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
                 [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-[seperator(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
             }
-            
+
             currentTopView = action.view;
         }];
-        
+
         [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[currentTopView]" options:0 metrics:nil views:NSDictionaryOfVariableBindings(currentTopView)]];
     }
 }
+
+//#pragma mark - Constraint Setup
+//- (void)setupConstraints {
+//    NSDictionary *metrics = @{@"seperatorHeight": @(1.f / [[UIScreen mainScreen] scale]), @"Margin": @(0.f)};
+//
+//    UIView *topContainer = self.topContainer;
+//    UIView *bottomContainer = self.bottomContainer;
+//    UILabel *headerTitleLabel = self.headerTitleLabel;
+//    UILabel *headerMessageLabel = self.headerMessageLabel;
+//
+//    NSDictionary *bindingsDict = NSDictionaryOfVariableBindings(topContainer, bottomContainer, headerTitleLabel, headerMessageLabel);
+//
+//    [self setupContainerConstraintWithBindings:bindingsDict metrics:metrics];
+//    [self setupTopContainerContentConstraintsWithMetrics:metrics];
+//    [self setupBottomContainerContentConstraintsWithMetrics:metrics];
+//}
+//
+//- (void)setupContainerConstraintWithBindings:(NSDictionary *)bindingsDict metrics:(NSDictionary *)metrics {
+//    [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(Margin)-[topContainer]-(Margin)-|" options:0 metrics:metrics views:bindingsDict]];
+//
+//    id item;
+//    if([self.cancelActions count] <= 0) {
+//        item = self.topContainer;
+//    } else {
+//        [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(Margin)-[bottomContainer]-(Margin)-|" options:0 metrics:metrics views:bindingsDict]];
+//        [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[topContainer]-(Margin)-[bottomContainer]" options:0 metrics:metrics views:bindingsDict]];
+//
+//        item = self.bottomContainer;
+//    }
+//
+//    NSInteger bottomMargin = 0;
+//    id bottomItem;
+//    if(@available(iOS 11, *)) {
+//        bottomItem = self.view.safeAreaLayoutGuide;
+//    } else {
+//        bottomItem = self.view;
+//    }
+//
+//    [self.view addConstraint:[NSLayoutConstraint constraintWithItem:item attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:bottomItem attribute:NSLayoutAttributeBottom multiplier:1 constant:-bottomMargin]];
+//}
+//
+//- (void)setupTopContainerContentConstraintsWithMetrics:(NSDictionary *)metrics {
+//    __block UIView *currentTopView = nil;
+//    __weak RMActionController *blockself = self;
+//    [self.doneActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
+//        UIView *seperator = [UIView seperatorView];
+//        [self addSubview:seperator toContainer:self.topContainer];
+//
+//        if(!currentTopView) {
+//            NSDictionary *bindings = @{@"actionView": action.view, @"seperator": seperator};
+//
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperator(seperatorHeight)]-(0)-[actionView]" options:0 metrics:metrics views:bindings]];
+//
+//            id bottomItem;
+//            if(@available(iOS 11, *)) {
+//                bottomItem = self.topContainer.safeAreaLayoutGuide;
+//            } else {
+//                bottomItem = self.topContainer;
+//            }
+//
+//            [blockself.topContainer addConstraint:[NSLayoutConstraint constraintWithItem:action.view attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:bottomItem attribute:NSLayoutAttributeBottom multiplier:1 constant:0]];
+//        } else {
+//            NSDictionary *bindings = @{@"actionView": action.view, @"seperator": seperator, @"currentTopView": currentTopView};
+//
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperator(seperatorHeight)]-(0)-[actionView]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
+//        }
+//
+//        currentTopView = seperator;
+//    }];
+//
+//    [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[contentView]-(0)-|" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
+//
+//    if(currentTopView) {
+//        [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[contentView]-(0)-[currentTopView]" options:0 metrics:nil views:@{@"contentView": self.contentView, @"currentTopView": currentTopView}]];
+//    } else {
+//        [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[contentView]-(0)-|" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
+//    }
+//
+//    if([self.additionalActions count] > 0 || [self.headerMessageLabel.text length] > 0 || [self.headerTitleLabel.text length] > 0) {
+//        __weak RMActionController *blockself = self;
+//        __block UIView *currentTopView = self.contentView;
+//
+//        [self.additionalActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
+//            UIView *actionView = action.view;
+//
+//            UIView *seperatorView = [UIView seperatorView];
+//            [self addSubview:seperatorView toContainer:blockself.topContainer];
+//
+//            NSDictionary *actionBindingsDict = NSDictionaryOfVariableBindings(currentTopView, seperatorView, actionView);
+//
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperatorView]-(0)-|" options:0 metrics:nil views:actionBindingsDict]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:actionBindingsDict]];
+//            [blockself.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-[seperatorView(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:actionBindingsDict]];
+//
+//            currentTopView = actionView;
+//        }];
+//
+//        if([self.headerMessageLabel.text length] > 0 || [self.headerTitleLabel.text length] > 0) {
+//            UIView *seperatorView = [UIView seperatorView];
+//            [self addSubview:seperatorView toContainer:self.topContainer];
+//
+//            NSDictionary *bindings = NSDictionaryOfVariableBindings(seperatorView, currentTopView);
+//
+//            [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperatorView]-(0)-|" options:0 metrics:nil views:bindings]];
+//            [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[seperatorView(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
+//
+//            currentTopView = seperatorView;
+//
+//            if([self.headerMessageLabel.text length] > 0) {
+//                bindings = @{@"messageLabel": self.headerMessageLabel, @"currentTopView": currentTopView};
+//
+//                [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(5)-[messageLabel]-(5)-|" options:0 metrics:nil views:bindings]];
+//                [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[messageLabel]-(10)-[currentTopView]" options:0 metrics:nil views:bindings]];
+//
+//                currentTopView = self.headerMessageLabel;
+//            }
+//
+//            if([self.headerTitleLabel.text length] > 0) {
+//                bindings = @{@"titleLabel": self.headerTitleLabel, @"currentTopView": currentTopView};
+//                NSDictionary *metrics = @{@"Margin": [currentTopView isKindOfClass:[UILabel class]] ? @(2) : @(10)};
+//
+//                [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(5)-[titleLabel]-(5)-|" options:0 metrics:nil views:bindings]];
+//                [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[titleLabel]-(Margin)-[currentTopView]" options:0 metrics:metrics views:bindings]];
+//
+//                currentTopView = self.headerTitleLabel;
+//            }
+//        }
+//
+//        NSDictionary *metrics = @{@"Margin": (currentTopView == self.headerMessageLabel || currentTopView == self.headerTitleLabel) ? @(10) : @(0)};
+//        NSDictionary *bindings = NSDictionaryOfVariableBindings(currentTopView);
+//
+//        [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(Margin)-[currentTopView]" options:0 metrics:metrics views:bindings]];
+//    } else  {
+//        [self.topContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[contentView]" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
+//    }
+//}
+//
+//- (void)setupBottomContainerContentConstraintsWithMetrics:(NSDictionary *)metrics {
+//    if([self.cancelActions count] == 1) {
+//        RMAction *action = [self.cancelActions lastObject];
+//        NSDictionary *bindings = @{@"actionView": action.view};
+//
+//        [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//        [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//    } else if([self.cancelActions count] > 1) {
+//        __weak RMActionController *blockself = self;
+//        __block UIView *currentTopView = nil;
+//
+//        [self.cancelActions enumerateObjectsUsingBlock:^(RMAction *action, NSUInteger index, BOOL *stop) {
+//            if(!currentTopView) {
+//                NSDictionary *bindings = @{@"actionView": action.view};
+//
+//                [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//                [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//            } else {
+//                UIView *seperatorView = [UIView seperatorView];
+//                [self addSubview:seperatorView toContainer:self.bottomContainer];
+//
+//                NSDictionary *bindings = @{@"actionView": action.view, @"currentTopView": currentTopView, @"seperator": seperatorView};
+//
+//                [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[actionView]-(0)-|" options:0 metrics:nil views:bindings]];
+//                [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"|-(0)-[seperator]-(0)-|" options:0 metrics:nil views:bindings]];
+//                [blockself.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[actionView]-(0)-[seperator(seperatorHeight)]-(0)-[currentTopView]" options:0 metrics:metrics views:bindings]];
+//            }
+//
+//            currentTopView = action.view;
+//        }];
+//
+//        [self.bottomContainer addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(0)-[currentTopView]" options:0 metrics:nil views:NSDictionaryOfVariableBindings(currentTopView)]];
+//    }
+//}
 
 - (void)setupTopContainersTopMarginConstraint {
     self.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -853,7 +1061,7 @@ typedef NS_ENUM(NSInteger, RMActionControllerAnimationStyle) {
             }
             
             [UIView animateWithDuration:duration delay:0 usingSpringWithDamping:damping initialSpringVelocity:1 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:^{
-                actionController.backgroundView.alpha = 0.8;
+                actionController.backgroundView.alpha = 1.0;
                 
                 [containerView layoutIfNeeded];
             } completion:^(BOOL finished) {
